@@ -1,5 +1,8 @@
+import re
 import js2py
 import requests
+from bs4 import BeautifulSoup
+from datetime import datetime
 from sqlalchemy import create_engine, Column, String
 from sqlalchemy.orm import sessionmaker, declarative_base
 from config import username, password, hostname, dbname
@@ -44,4 +47,37 @@ def get_all_funds_info():
     session.commit()
 
 
-get_all_funds_info()
+def get_fund_net_worth(fund_code, start_date, end_date):
+    """
+    input:
+        fund_code, 基金代码; start_date, 查询起始日; end_date, 查询截止日
+
+    output:
+        净值日期, 单位净值, 累计净值, 日增长率, 申购状态, 赎回状态, 分红送配
+    """
+    days = (datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')).days + 1
+    url_model = 'https://fundf10.eastmoney.com/F10DataApi.aspx?type=lsjz&code={}&sdate={}&edate={}&per={}'
+    url = url_model.format(fund_code, start_date, end_date, days)
+    r = requests.get(url)
+    js_code = r.text
+    record_num = int(re.search('(?<=records:)\\d+', js_code).group(0))
+    soup = BeautifulSoup(js_code, 'lxml')
+    table_rows = []
+    for rows in soup.findAll("tbody")[0].findAll("tr"):
+        table_records = []
+        for record in rows.findAll('td'):
+            val = record.contents
+            if len(val) == 0:
+                table_records.append(None)
+            else:
+                table_records.append(val[0])
+        table_rows.append(table_records)
+    if len(table_rows) > record_num:
+        table_rows = table_rows[:record_num]
+    return table_rows
+
+
+r = get_fund_net_worth('000176', '2021-04-20', '2021-04-21')
+for x in r:
+    print(x)
+# get_all_funds_info()
